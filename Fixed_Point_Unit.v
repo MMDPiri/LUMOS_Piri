@@ -40,7 +40,7 @@ module Fixed_Point_Unit
     reg [WIDTH - 1 : 0] root;
     reg root_ready;
 
-    reg [1 : 0] currentsquarephase;
+    reg [1 : 0] current_square_phase;
     reg [1 : 0] next_square_phase;
 
     always @(posedge clk) 
@@ -57,13 +57,13 @@ module Fixed_Point_Unit
     begin
         next_square_phase <= 'bz;
         case (current_square_phase)
-            2'b00 : begin sqrt_start <= 0; next_square_phase <= 2'b01; end
-            2'b01 : begin sqrt_start <= 1; next_square_phase <= 2'b10; end
-            2'b10 : begin sqrt_start <= 0; next_square_phase <= 2'b10; end
+            2'b00 : begin sqrt_function_begin <= 0; next_square_phase <= 2'b01; end
+            2'b01 : begin sqrt_function_begin <= 1; next_square_phase <= 2'b10; end
+            2'b10 : begin sqrt_function_begin <= 0; next_square_phase <= 2'b10; end
         endcase    
     end
-    reg sqrt_start;
-    reg sqrt_busy;
+    reg sqrt_function_begin;
+    reg sqrt_function_busy;
     
     reg [WIDTH - 1 : 0] x, xnew;              
     reg [WIDTH - 1 : 0] q, qnew;              
@@ -93,7 +93,7 @@ module Fixed_Point_Unit
     
     always @(posedge clk) 
     begin
-        if (sqrt_start)
+        if (sqrt_function_begin)
         begin
             sqrt_busy <= 1;
             root_ready <= 0;
