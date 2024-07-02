@@ -105,14 +105,14 @@ module Fixed_Point_Unit
         else if (sqrt_busy)
         begin
             if (i == ITER-1) 
-            begin  // we're done
+            begin
                 sqrt_busy <= 0;
                 root_ready <= 1;
                 root <= qnew;
             end
 
             else 
-            begin  // next iteration
+            begin  
                 i <= i + 1;
                 x <= xnew;
                 ac <= acnew;
