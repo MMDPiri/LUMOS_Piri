@@ -14,6 +14,7 @@ Computer Organization - Spring 2024
 ## SQRT Part
 
 The first part of the Verilog code describes a **square root circuit**. The functionality breakdown is as follows:
+
     // ------------------- //
     // Square Root Circuit //
     // ------------------- //
