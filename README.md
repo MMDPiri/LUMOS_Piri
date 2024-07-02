@@ -223,21 +223,6 @@ The first part of the Verilog code describes a **square root circuit**. The func
         endcase    
     end
 
-endmodule
-
-module Multiplier
-(
-    input wire [15 : 0] operand_1,
-    input wire [15 : 0] operand_2,
-
-    output reg [31 : 0] product
-);
-
-    always @(*)
-    begin
-        product <= operand_1 * operand_2;
-    end
-endmodule
 
 The second part of the Verilog code describes a **Multiplier Circuit**. The functionality breakdown is as follows:
 
