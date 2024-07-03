@@ -18,63 +18,68 @@ The first part of the Verilog code describes a **square root circuit**. The func
     // ------------------- //
     // Square Root Circuit //
     // ------------------- //
-    reg [WIDTH - 1 : 0] root;
+        reg [WIDTH - 1 : 0] root;
     reg root_ready;
 
-    reg [1 : 0] current_square_phase;
-    reg [1 : 0] next_square_phase;
+    // here is the code for sqrt module
+    // reference: https://github.com/IUST-Computer-Organization/Spring-2023/blob/main/Final_Project/RV32IMF_Processor/SQRT_Unit.v
+
+    reg [1 : 0] stage;
+    reg [1 : 0] next_stage;
 
     always @(posedge clk) 
     begin
-        if (operation == `FPU_SQRT) current_square_phase <= next_square_phase;
+        if (operation == `FPU_SQRT) stage <= next_stage;
         else                        
         begin
-            current_square_phase <= 2'b00;
+            stage <= 2'b00;
             root_ready <= 0;
         end
     end 
 
     always @(*) 
     begin
-        next_square_phase <= 'bz;
-        case (current_square_phase)
-            2'b00 : begin sqrt_function_begin <= 0; next_square_phase <= 2'b01; end
-            2'b01 : begin sqrt_function_begin <= 1; next_square_phase <= 2'b10; end
-            2'b10 : begin sqrt_function_begin <= 0; next_square_phase <= 2'b10; end
+        next_stage <= 0;
+        case (stage)
+            2'b00 : begin sqrt_start <= 0; next_stage <= 2'b01; end
+            2'b01 : begin sqrt_start <= 1; next_stage <= 2'b10; end
+            2'b10 : begin sqrt_start <= 0; next_stage <= 2'b10; end
         endcase    
     end
-    reg sqrt_function_begin;
-    reg sqrt_function_busy;
-    
-    reg [WIDTH - 1 : 0] x, xnew;              
-    reg [WIDTH - 1 : 0] q, qnew;              
-    reg [WIDTH + 1 : 0] ac, acnew;            
-    reg [WIDTH + 1 : 0] test_result;               
+
+    reg [WIDTH - 1 : 0] x, x_next;              
+    reg [WIDTH - 1 : 0] q, q_next;              
+    reg [WIDTH + 1 : 0] ac, ac_next;            
+    reg [WIDTH + 1 : 0] test_res;               
 
     reg valid;
+    reg sqrt_start;
+    reg sqrt_busy;
+    
 
     localparam ITER = (WIDTH + FBITS) >> 1;     
     reg [4 : 0] i = 0;                              
 
+    
     always @(*)
     begin
-        test_result = ac - {q, 2'b01};
+        test_res = ac - {q, 2'b01};
 
-        if (test_result[WIDTH + 1] == 0) 
+        if (test_res[WIDTH + 1] == 0) 
         begin
-            {acnew, xnew} = {test_result[WIDTH - 1 : 0], x, 2'b0};
-            qnew = {q[WIDTH - 2 : 0], 1'b1};
+            {ac_next, x_next} = {test_res[WIDTH - 1 : 0], x, 2'b0};
+            q_next = {q[WIDTH - 2 : 0], 1'b1};
         end 
         else 
         begin
-            {acnew, xnew} = {ac[WIDTH - 1 : 0], x, 2'b0};
-            qnew = q << 1;
+            {ac_next, x_next} = {ac[WIDTH - 1 : 0], x, 2'b0};
+            q_next = q << 1;
         end
     end
     
     always @(posedge clk) 
     begin
-        if (sqrt_function_begin)
+        if (sqrt_start)
         begin
             sqrt_busy <= 1;
             root_ready <= 0;
@@ -89,47 +94,55 @@ The first part of the Verilog code describes a **square root circuit**. The func
             begin  // we're done
                 sqrt_busy <= 0;
                 root_ready <= 1;
-                root <= qnew;
+                root <= q_next;
             end
 
             else 
             begin  // next iteration
                 i <= i + 1;
-                x <= xnew;
-                ac <= acnew;
-                q <= qnew;
+                x <= x_next;
+                ac <= ac_next;
+                q <= q_next;
                 root_ready <= 0;
             end
         end
     end
 
-    
-1. **Registers and Signals**:
-   - `root`: A register of width `WIDTH` that holds the square root value.
-   - `root_ready`: A flag indicating whether the square root result is ready.
-   - `current_square_phase` and `next_square_phase`: Two 2-bit registers used to manage the stages of the square root computation.
+1. **Registers and Parameters**:
+    - `root` and `root_ready` are registers.
+    - `stage` and `next_stage` are 2-bit registers representing the state machine.
+    - `valid`, `sqrt_start`, and `sqrt_busy` are registers for control signals.
+    - `ITER` is a local parameter representing the number of iterations.
 
-2. **Clock-Driven Logic**:
-   - The `always @(posedge clk)` block handles clock-driven behavior.
-   - If the operation is a square root (`operation == `FPU_SQRT``), it updates the `current_square_phase` based on the next stage value.
-   - Otherwise, it resets `current_square_phase` to `2'b00` and clears `root_ready`.
+2. **Always Block for State Machine**:
+    - The first `always @(posedge clk)` block updates the state machine (`stage`) based on the `operation` signal (presumably a square root calculation).
+    - If the operation is a square root (`FPU_SQRT`), it transitions to the next stage; otherwise, it resets the stage and sets `root_ready` to 0.
 
-3. **Combinational Logic**:
-   - The `always @(*)` block is combinatorial (sensitivity to any change in inputs).
-   - It determines the next value of `next_square_phase` based on the current `current_square_phase`.
-   - Other signals (`sqrt_start`, `sqrt_busy`, `x`, `q`, `ac`, `test_res`, `valid`, etc.) are also updated based on various conditions.
+3. **Combinational Logic Block for State Transition**:
+    - The second `always @(*)` block computes the next stage (`next_stage`) based on the current stage.
+    - It transitions through three stages: `00`, `01`, and `10`, controlling the `sqrt_start` signal.
 
-4. **Square Root Computation**:
-   - The circuit computes the square root of an input value (`operand_1`) using the Newton-Raphson method.
-   - It iteratively refines the approximation of the square root.
-   - The iteration count is determined by `ITER`.
-   - The final result is stored in `root`.
+4. **Square Root Computation Logic**:
+    - The code calculates the square root iteratively using the Newton-Raphson method.
+    - Variables:
+        - `x` represents the radicand.
+        - `q` represents the result.
+        - `ac` is an accumulator.
+        - `test_res` is the difference between `ac` and `{q, 2'b01}`.
+    - The algorithm:
+        - If `test_res[WIDTH + 1]` is 0, adjust `ac_next` and `x_next`.
+        - Otherwise, shift `q` left by 1.
+    - The iteration continues until `i` reaches `ITER-1`.
+    - The final result is stored in `root`.
 
-5. **Overall Behavior**:
-   - When `sqrt_function_begin` is asserted, the circuit initializes the computation.
-   - It proceeds through iterations until reaching the desired accuracy.
-   - Once done, it sets `root_ready` and stores the result in `root`.
-
+5. **Clock-Based Updates**:
+    - The second `always @(posedge clk)` block handles control signals during the computation.
+    - If `sqrt_start` is active:
+        - Initialize variables (`i`, `q`, `ac`, `x`).
+        - Set `sqrt_busy` and clear `root_ready`.
+    - If `sqrt_busy`:
+        - Update variables based on the iteration.
+        - When done, set `root_ready` and store the result in `root`.
 
 
  ## Multiplication Part
@@ -257,5 +270,10 @@ The second part of the Verilog code describes a **Multiplier Circuit**. The func
    - It directly multiplies the operands using the expression `product <= operand_1 * operand_2`.
 
 In summary, this Verilog code implements a multi-phase multiplier circuit that computes the product of two 32-bit numbers. The result is stored in the `product` register, and the `product_ready` flag indicates when the computation is complete.
-## Validation
 
+## Validation
+The result for validation of the written code is as follows :
+
+![image](https://github.com/MMDPiri/LUMOS_Piri/assets/169598509/09513b58-fe8e-4465-ab56-92347de5e9d4)
+
+As you could see we have reached the number 1126.295, so the result is correct.
