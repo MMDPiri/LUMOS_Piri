@@ -18,68 +18,62 @@ The first part of the Verilog code describes a **square root circuit**. The func
     // ------------------- //
     // Square Root Circuit //
     // ------------------- //
-        reg [WIDTH - 1 : 0] root;
+    reg [WIDTH - 1 : 0] root;
     reg root_ready;
-
-    // here is the code for sqrt module
-    // reference: https://github.com/IUST-Computer-Organization/Spring-2023/blob/main/Final_Project/RV32IMF_Processor/SQRT_Unit.v
-
-    reg [1 : 0] stage;
-    reg [1 : 0] next_stage;
+    reg [1 : 0] current_square_phase;
+    reg [1 : 0] next_square_phase;
 
     always @(posedge clk) 
     begin
-        if (operation == `FPU_SQRT) stage <= next_stage;
+        if (operation == `FPU_SQRT) current_square_phase <= next_square_phase;
         else                        
         begin
-            stage <= 2'b00;
+            current_square_phase <= 2'b00;
             root_ready <= 0;
         end
     end 
 
     always @(*) 
     begin
-        next_stage <= 0;
-        case (stage)
-            2'b00 : begin sqrt_start <= 0; next_stage <= 2'b01; end
-            2'b01 : begin sqrt_start <= 1; next_stage <= 2'b10; end
-            2'b10 : begin sqrt_start <= 0; next_stage <= 2'b10; end
+        next_square_phase <= 'bz;
+        case (current_square_phase)
+            2'b00 : begin sqrt_function_begin <= 0; next_square_phase <= 2'b01; end
+            2'b01 : begin sqrt_function_begin <= 1; next_square_phase <= 2'b10; end
+            2'b10 : begin sqrt_function_begin <= 0; next_square_phase <= 2'b10; end
         endcase    
     end
-
-    reg [WIDTH - 1 : 0] x, x_next;              
-    reg [WIDTH - 1 : 0] q, q_next;              
-    reg [WIDTH + 1 : 0] ac, ac_next;            
-    reg [WIDTH + 1 : 0] test_res;               
+    reg sqrt_function_begin;
+    reg sqrt_function_busy;
+    
+    reg [WIDTH - 1 : 0] x, xnew;              
+    reg [WIDTH - 1 : 0] q, qnew;              
+    reg [WIDTH + 1 : 0] ac, acnew;            
+    reg [WIDTH + 1 : 0] test_result;               
 
     reg valid;
-    reg sqrt_start;
-    reg sqrt_busy;
-    
 
     localparam ITER = (WIDTH + FBITS) >> 1;     
     reg [4 : 0] i = 0;                              
 
-    
     always @(*)
     begin
-        test_res = ac - {q, 2'b01};
+        test_result = ac - {q, 2'b01};
 
-        if (test_res[WIDTH + 1] == 0) 
+        if (test_result[WIDTH + 1] == 0) 
         begin
-            {ac_next, x_next} = {test_res[WIDTH - 1 : 0], x, 2'b0};
-            q_next = {q[WIDTH - 2 : 0], 1'b1};
+            {acnew, xnew} = {test_result[WIDTH - 1 : 0], x, 2'b0};
+            qnew = {q[WIDTH - 2 : 0], 1'b1};
         end 
         else 
         begin
-            {ac_next, x_next} = {ac[WIDTH - 1 : 0], x, 2'b0};
-            q_next = q << 1;
+            {acnew, xnew} = {ac[WIDTH - 1 : 0], x, 2'b0};
+            qnew = q << 1;
         end
     end
     
     always @(posedge clk) 
     begin
-        if (sqrt_start)
+        if (sqrt_function_begin)
         begin
             sqrt_busy <= 1;
             root_ready <= 0;
@@ -91,18 +85,18 @@ The first part of the Verilog code describes a **square root circuit**. The func
         else if (sqrt_busy)
         begin
             if (i == ITER-1) 
-            begin  // we're done
+            begin  
                 sqrt_busy <= 0;
                 root_ready <= 1;
-                root <= q_next;
+                root <= qnew;
             end
 
             else 
-            begin  // next iteration
+            begin  
                 i <= i + 1;
-                x <= x_next;
-                ac <= ac_next;
-                q <= q_next;
+                x <= xnew;
+                ac <= acnew;
+                q <= qnew;
                 root_ready <= 0;
             end
         end
@@ -110,17 +104,19 @@ The first part of the Verilog code describes a **square root circuit**. The func
 
 1. **Registers and Parameters**:
     - `root` and `root_ready` are registers.
-    - `stage` and `next_stage` are 2-bit registers representing the state machine.
-    - `valid`, `sqrt_start`, and `sqrt_busy` are registers for control signals.
+    - `current_square_phase` and `next_square_phase` are 2-bit registers representing the state machine.
+    - `sqrt_function_begin` and `sqrt_function_busy` are control signals.
+    - `x`, `q`, `ac`, and `test_result` are registers for intermediate calculations.
+    - `valid` is another register (though it's not used in this snippet).
     - `ITER` is a local parameter representing the number of iterations.
 
-2. **Always Block for State Machine**:
-    - The first `always @(posedge clk)` block updates the state machine (`stage`) based on the `operation` signal (presumably a square root calculation).
+2. **State Machine Logic**:
+    - The first `always @(posedge clk)` block updates the state machine (`current_square_phase`) based on the `operation` signal (presumably a square root calculation).
     - If the operation is a square root (`FPU_SQRT`), it transitions to the next stage; otherwise, it resets the stage and sets `root_ready` to 0.
 
 3. **Combinational Logic Block for State Transition**:
-    - The second `always @(*)` block computes the next stage (`next_stage`) based on the current stage.
-    - It transitions through three stages: `00`, `01`, and `10`, controlling the `sqrt_start` signal.
+    - The second `always @(*)` block computes the next stage (`next_square_phase`) based on the current stage.
+    - It transitions through three stages: `00`, `01`, and `10`, controlling the `sqrt_function_begin` signal.
 
 4. **Square Root Computation Logic**:
     - The code calculates the square root iteratively using the Newton-Raphson method.
@@ -128,16 +124,13 @@ The first part of the Verilog code describes a **square root circuit**. The func
         - `x` represents the radicand.
         - `q` represents the result.
         - `ac` is an accumulator.
-        - `test_res` is the difference between `ac` and `{q, 2'b01}`.
-    - The algorithm:
-        - If `test_res[WIDTH + 1]` is 0, adjust `ac_next` and `x_next`.
-        - Otherwise, shift `q` left by 1.
-    - The iteration continues until `i` reaches `ITER-1`.
-    - The final result is stored in `root`.
+        - `test_result` is the difference between `ac` and `{q, 2'b01}`.
+    - If `test_result[WIDTH + 1]` is 0, adjust `acnew` and `xnew`.
+    - Otherwise, shift `qnew` left by 1.
 
 5. **Clock-Based Updates**:
     - The second `always @(posedge clk)` block handles control signals during the computation.
-    - If `sqrt_start` is active:
+    - If `sqrt_function_begin` is active:
         - Initialize variables (`i`, `q`, `ac`, `x`).
         - Set `sqrt_busy` and clear `root_ready`.
     - If `sqrt_busy`:
